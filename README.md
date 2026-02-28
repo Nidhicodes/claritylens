@@ -1,48 +1,63 @@
+<div align="center">
+
 # ClarityLens
 
-> AI-powered smart contract auditor and developer assistant for the [Clarity](https://docs.stacks.co/clarity/overview) language on the Stacks blockchain.
+### AI-Powered Smart Contract Auditor for the Stacks Ecosystem
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Stacks Ecosystem](https://img.shields.io/badge/Stacks-Ecosystem-5546FF)](https://stacks.co)
 [![Status: Private Beta](https://img.shields.io/badge/Status-Private%20Beta-orange)]()
-[![Built with: Python + TypeScript](https://img.shields.io/badge/Built%20with-Python%20%2B%20TypeScript-blue)]()
+[![Stack: Python + TypeScript](https://img.shields.io/badge/Stack-Python%20%2B%20TypeScript-blue)]()
+[![Research: 3 IEEE Papers](https://img.shields.io/badge/Research-3%20IEEE%20Papers-green)](https://ieeexplore.ieee.org/)
 
-> **Note:** The core model and inference codebase are currently private and in active testing. This repository is the public-facing project home, architecture specs, VS Code extension client, and public API schema are documented here. Interested in early access? See [Early Access](#early-access).
+[Early Access](#early-access) · [Architecture](#high-level-architecture) · [API Docs](#api-design) · [Roadmap](#roadmap)
 
----
-
-## Table of Contents
-
-- [Why ClarityLens](#why-claritylens)
-- [What It Does](#what-it-does)
-- [High-Level Architecture](#high-level-architecture)
-- [System Component Diagram](#system-component-diagram)
-- [Audit Request Flow](#audit-request-flow)
-- [Inference Pipeline](#inference-pipeline)
-- [Model Training Pipeline](#model-training-pipeline)
-- [CI/CD Integration Flow](#cicd-integration-flow)
-- [API Design](#api-design)
-- [API State Machine](#api-state-machine)
-- [Data Model](#data-model)
-- [Vulnerability Detection](#vulnerability-detection)
-- [VS Code Extension](#vs-code-extension)
-- [Roadmap](#roadmap)
-- [Research and Methodology](#research-and-methodology)
-- [Early Access](#early-access)
-- [Contributing](#contributing)
-- [License](#license)
+</div>
 
 ---
 
-## Why ClarityLens
+> **Private Beta:** The core model and inference codebase are currently private and under active testing. This repository is the public project home — architecture, API schema, VS Code extension client, and documentation live here and are released progressively. See [Early Access](#early-access) to get involved.
 
-Clarity is Stacks' most powerful technical differentiator. It's decidable, non-Turing-complete, and designed from the ground up for safety and predictability. You can know, before deployment, exactly what a Clarity contract will do.
+---
 
-But that power comes with a steep learning curve. Clarity's unique execution model — no reentrancy by default, post-conditions, principal-based auth, explicit error handling — means developers coming from Solidity or Rust carry mental models that don't transfer cleanly. The result: subtle bugs, insecure patterns, and slow onboarding.
+## The Problem
 
-Every major smart contract ecosystem has AI-assisted tooling. Stacks doesn't yet.
+Stacks ranked **#5 among the world's fastest-growing developer ecosystems in 2025** (Electric Capital). The sBTC TVL surpassed $600M. Clarity 4 activated. Institutional integrations from Circle, BitGo, and Wormhole arrived. The ecosystem is growing fast.
 
-**ClarityLens is that tool.** It doesn't just lint syntax — it understands the semantic intent of your contract and flags where your implementation diverges from safe, idiomatic Clarity patterns.
+But there's a gap.
+
+Every developer writing Clarity contracts today faces the same problem: **there is no AI-assisted security tooling**. The only existing option is [STACY](https://www.coinfabrik.com/products/stacy-for-stacks-clarity-static-analyzer/) — a rule-based static analyzer built by CoinFabrik. STACY is valuable, but it has fundamental limitations inherent to all rule-based systems:
+
+| Limitation | Impact |
+|---|---|
+| Rules only catch *known* patterns | Novel vulnerabilities pass through |
+| No semantic understanding | Business logic flaws are invisible |
+| No fix suggestions | Developer still has to figure out *how* to fix |
+| No natural language interface | High barrier for developers new to Clarity |
+| High false-positive rates | Alert fatigue; developers tune out warnings |
+| No IDE integration | Friction in the development workflow |
+
+Research is clear on this gap. Recent benchmarks show that LLM-augmented analysis achieves **F1 scores of 0.75–0.87** versus **0.26–0.55** for pure static tools — a near 3× improvement in finding real vulnerabilities while maintaining developer trust through lower false-positive rates.
+
+**ClarityLens closes this gap for Stacks.** It combines a fast deterministic pre-pass for known patterns with a fine-tuned LLM that understands Clarity's semantic intent — then generates idiomatic fix suggestions in plain language. It integrates directly into the developer's IDE and CI pipeline, so security feedback arrives at the moment it's most actionable: *while writing code, not after deployment*.
+
+The timing matters. As Stacks DeFi scales toward $1B TVL, as institutional capital arrives, as sBTC becomes the backbone of Bitcoin-secured finance — the cost of a single exploited contract scales with it. Security tooling is no longer optional infrastructure. It's table stakes.
+
+---
+
+## Why This Couldn't Be Built Anywhere Else
+
+The Stacks Endowment asks that funded projects leverage what makes Stacks unique. ClarityLens is built entirely around Clarity's properties:
+
+**Clarity is interpreted, not compiled** — contracts exist on-chain exactly as written. This means ClarityLens can operate directly on source, with no bytecode decompilation step, no compiler abstraction layer to reason through. The analysis is clean and auditable.
+
+**Clarity is decidable** — static analysis of Clarity contracts can make stronger guarantees than analysis of Turing-complete languages. ClarityLens takes advantage of this: its rule engine can reason precisely about execution paths in ways that are impossible in Solidity.
+
+**Clarity has explicit post-conditions** — ClarityLens specifically audits whether transactions include appropriate post-conditions, a Clarity-native safety mechanism that has no equivalent elsewhere.
+
+**Clarity's principal-based auth model** — ClarityLens understands `tx-sender`, `contract-caller`, and the differences between them, and flags auth patterns that are correct in other languages but dangerous in Clarity's execution model.
+
+This is not a generic "smart contract security tool" ported to Clarity. It's built *for* Clarity's properties.
 
 ---
 
@@ -50,12 +65,13 @@ Every major smart contract ecosystem has AI-assisted tooling. Stacks doesn't yet
 
 | Feature | Description |
 |---|---|
-| **Vulnerability Detection** | Flags known insecure patterns: unchecked inputs, improper principal authorization, unsafe arithmetic, missing post-conditions |
-| **Fix Suggestions** | Inline recommendations with idiomatic rewrites, not just error messages |
-| **Clarity Assistant** | Natural language questions about your contract — "what does this function do?", "is this authorization check correct?" |
-| **VS Code Extension** | Real-time diagnostics as you write, no CLI required |
-| **REST API** | Integrate auditing into your CI/CD pipeline programmatically |
-| **Audit Reports** | Structured JSON or Markdown audit summaries per contract |
+| **Hybrid Vulnerability Detection** | Two-stage: fast AST-based rule pass + deep LLM semantic analysis |
+| **Fix Suggestions** | Idiomatic Clarity rewrites with explanations, not just error codes |
+| **Clarity Assistant** | Natural language Q&A about your contract — intent, behavior, risks |
+| **VS Code Extension** | Real-time inline diagnostics via LSP, no context switching |
+| **REST API** | Programmatic access for CI/CD integration |
+| **Structured Audit Reports** | JSON or Markdown summaries per contract, shareable with teams |
+| **Confidence Scoring** | Every finding comes with a confidence score to help prioritize |
 
 ---
 
@@ -64,52 +80,43 @@ Every major smart contract ecosystem has AI-assisted tooling. Stacks doesn't yet
 ```mermaid
 graph TB
     subgraph Clients["Client Layer"]
-        VSC[VS Code Extension\nTypeScript / LSP]
-        CLI[CLI Tool\nPython]
-        WEB[Web Playground\ncoming soon]
-        GHA[GitHub Action\nCI/CD]
+        VSC["VS Code Extension\n(TypeScript / LSP)"]
+        CLI["CLI Tool\n(Python)"]
+        WEB["Web Playground\n(coming soon)"]
+        GHA["GitHub Action\n(CI/CD)"]
     end
 
-    subgraph Gateway["API Gateway"]
-        LB[Load Balancer]
-        AUTH[Auth Middleware\nAPI Key / Rate Limit]
-        ROUTER[Request Router]
-        CACHE[Response Cache\nRedis]
+    subgraph Gateway["API Gateway (FastAPI)"]
+        LB["Load Balancer"]
+        AUTH["Auth Middleware\nAPI Key + Rate Limiting"]
+        ROUTER["Request Router"]
+        CACHE["Redis Cache\n(contract hash keyed)"]
     end
 
-    subgraph Inference["Inference Layer (Private)"]
-        AST[AST Parser\nClarity Grammar]
-        STATIC[Static Analyzer\nPattern Matching]
-        LLM[Fine-tuned LLM\nClarity Corpus]
-        SYNTH[Fix Synthesizer]
-        RANK[Finding Ranker\nConfidence Scoring]
+    subgraph Inference["Inference Layer Private"]
+        AST["Clarity AST Parser\n(custom grammar)"]
+        SA["Static Analyzer\nRule Engine — 8 classes"]
+        LLM["Fine-tuned LLM\nClarity Corpus — ~50k contracts"]
+        SYNTH["Fix Synthesizer"]
+        RANK["Confidence Ranker\n+ Deduplicator"]
     end
 
-    subgraph Storage["Storage"]
-        DB[(PostgreSQL\nAudit History)]
-        VECTOR[(Vector Store\nContract Embeddings)]
-        QUEUE[Job Queue\nAsync Audits]
+    subgraph Storage["Data Layer"]
+        PG[("PostgreSQL\nAudit History")]
+        REDIS[("Redis\nResponse Cache")]
+        QDRANT[("Qdrant\nVector Store")]
+        QUEUE["Job Queue\nAsync Audits"]
     end
 
-    VSC -->|REST / WebSocket| LB
-    CLI -->|REST| LB
-    WEB -->|REST| LB
-    GHA -->|REST| LB
-
-    LB --> AUTH
-    AUTH --> ROUTER
+    VSC & CLI & WEB & GHA -->|"REST / WebSocket"| LB
+    LB --> AUTH --> ROUTER
     ROUTER --> CACHE
     ROUTER --> QUEUE
-
     QUEUE --> AST
-    AST --> STATIC
-    AST --> LLM
-    STATIC --> RANK
-    LLM --> SYNTH
-    SYNTH --> RANK
-
-    RANK --> DB
-    DB --> VECTOR
+    AST --> SA & LLM
+    SA & LLM --> SYNTH --> RANK
+    RANK --> PG & CACHE
+    QDRANT <--> LLM
 ```
 
 ---
@@ -119,64 +126,47 @@ graph TB
 ```mermaid
 graph LR
     subgraph VSCode["VS Code Extension"]
-        EXT_LSP[LSP Client]
-        EXT_UI[Diagnostic Renderer]
-        EXT_CMD[Command Palette]
-        EXT_CFG[Config Manager]
+        LSP["LSP Client"]
+        UI["Diagnostic Renderer\n(squiggles, hover, Problems panel)"]
+        CMD["Command Palette"]
+        CFG["Config Manager\n(apiKey, threshold, endpoint)"]
+        CMD & CFG --> LSP --> UI
     end
 
-    subgraph API["FastAPI Gateway"]
-        EP_AUDIT[POST /audit]
-        EP_EXPLAIN[POST /explain]
-        EP_SUGGEST[POST /suggest]
-        EP_REPORT[GET /report/:id]
-        MIDDLEWARE[Auth + Rate Limit]
-        SERIALIZER[Pydantic Serializer]
+    subgraph API["API Gateway"]
+        MW["Auth + Rate Limit\nMiddleware"]
+        EP1["POST /v1/audit"]
+        EP2["POST /v1/explain"]
+        EP3["POST /v1/suggest"]
+        EP4["GET /v1/report/:id"]
+        SER["Pydantic Serializer\n+ Validator"]
+        MW --> EP1 & EP2 & EP3 & EP4 --> SER
     end
 
-    subgraph InferenceEngine["Inference Engine (Private)"]
-        PARSER[Clarity AST Parser]
-        PATTERN[Pattern Matcher\nRule Engine]
-        EMBEDDER[Contract Embedder]
-        MODEL[Fine-tuned LLM]
-        FIXGEN[Fix Generator]
-        SCORER[Confidence Scorer]
+    subgraph Engine["Inference Engine (Private)"]
+        P["Clarity AST Parser"]
+        R["Rule Engine\nCL-001 to CL-008"]
+        E["Contract Embedder\nchunking + vectorization"]
+        M["Fine-tuned LLM\nsemantic classification"]
+        F["Fix Generator\nidiomatic Clarity rewrites"]
+        S["Confidence Scorer"]
+        P --> R & E
+        E --> M --> F --> S
+        R --> S
     end
 
-    subgraph DataLayer["Data Layer"]
-        PG[(PostgreSQL)]
-        REDIS[(Redis Cache)]
-        QDRANT[(Qdrant\nVector DB)]
+    subgraph Data["Data Layer"]
+        PG[("PostgreSQL")]
+        RD[("Redis")]
+        QD[("Qdrant")]
     end
 
-    EXT_LSP -->|HTTP POST| MIDDLEWARE
-    EXT_CMD --> EXT_LSP
-    EXT_CFG --> EXT_LSP
-
-    MIDDLEWARE --> EP_AUDIT
-    MIDDLEWARE --> EP_EXPLAIN
-    MIDDLEWARE --> EP_SUGGEST
-    MIDDLEWARE --> EP_REPORT
-
-    EP_AUDIT --> SERIALIZER
-    EP_EXPLAIN --> SERIALIZER
-    EP_SUGGEST --> SERIALIZER
-
-    SERIALIZER --> PARSER
-    PARSER --> PATTERN
-    PARSER --> EMBEDDER
-    EMBEDDER --> QDRANT
-    EMBEDDER --> MODEL
-    PATTERN --> SCORER
-    MODEL --> FIXGEN
-    FIXGEN --> SCORER
-
-    SCORER --> PG
-    PG --> REDIS
-    REDIS -->|Cached Response| EP_AUDIT
-
-    EP_AUDIT -->|LSP Diagnostics| EXT_LSP
-    EXT_LSP --> EXT_UI
+    LSP -->|"HTTP POST"| MW
+    SER --> P
+    S --> PG --> RD
+    RD -->|"Cache Hit"| EP1
+    E <--> QD
+    EP1 -->|"LSP Diagnostics"| LSP
 ```
 
 ---
@@ -188,7 +178,7 @@ sequenceDiagram
     actor Dev as Developer
     participant EXT as VS Code Extension
     participant GW as API Gateway
-    participant CACHE as Redis Cache
+    participant CACHE as Redis
     participant QUEUE as Job Queue
     participant AST as AST Parser
     participant SA as Static Analyzer
@@ -197,38 +187,40 @@ sequenceDiagram
 
     Dev->>EXT: Save .clar file
     EXT->>EXT: Debounce (300ms)
-    EXT->>GW: POST /audit {contract, options}
-    GW->>GW: Validate API key
-    GW->>CACHE: Check contract hash
+    EXT->>GW: POST /v1/audit {contract_source, options}
+    GW->>GW: Validate API key + check rate limit
+    GW->>CACHE: Lookup by SHA-256(contract_source)
 
-    alt Cache Hit
-        CACHE-->>GW: Return cached findings
-        GW-->>EXT: 200 OK {findings}
+    alt Cache Hit (same contract, <1hr)
+        CACHE-->>GW: Cached findings
+        GW-->>EXT: 200 OK {findings, cached: true}
     else Cache Miss
-        GW->>QUEUE: Enqueue audit job
-        QUEUE->>AST: Parse contract to AST
-        AST->>AST: Tokenize + build symbol table
+        GW->>QUEUE: Enqueue audit job (job_id)
+        QUEUE->>AST: Parse contract text
+        AST->>AST: Tokenize → S-expression tree → Symbol table → CFG
 
-        par Parallel Analysis
-            AST->>SA: Run pattern rules
-            SA->>SA: CL-001 through CL-008 checks
-        and
-            AST->>LLM: Semantic analysis
-            LLM->>LLM: Vulnerability classification
-            LLM->>LLM: Context-aware reasoning
+        par Stage 2a — Fast Static Pass
+            AST->>SA: Run deterministic rule checks
+            SA->>SA: CL-001 Arithmetic / CL-002 Auth / CL-004 Post-conditions
+            SA->>SA: CL-005 Reentrancy / CL-006 Hardcoded / CL-008 Unguarded
+        and Stage 2b — Deep Semantic Pass
+            AST->>LLM: Contract AST + symbol table
+            LLM->>LLM: Multi-label vulnerability classification
+            LLM->>LLM: Business logic reasoning
+            LLM->>LLM: Confidence scoring per finding
         end
 
-        SA-->>LLM: Static findings
-        LLM->>LLM: Synthesize fix suggestions
-        LLM->>LLM: Score confidence per finding
+        SA-->>LLM: Static findings (pre-filter)
+        LLM->>LLM: Fix synthesis for all findings
+        LLM->>LLM: Deduplication + ranking
         LLM->>DB: Persist audit record
         LLM->>CACHE: Cache result (TTL: 1hr)
-        LLM-->>GW: Aggregated findings
-        GW-->>EXT: 200 OK {findings, audit_id}
+        LLM-->>GW: {findings[], summary, audit_id, duration_ms}
+        GW-->>EXT: 200 OK
     end
 
-    EXT->>EXT: Map findings to LSP diagnostics
-    EXT->>Dev: Render inline squiggles + hover tooltips
+    EXT->>EXT: Map findings → LSP DiagnosticCollection
+    EXT->>Dev: Inline squiggles + hover tooltips
 ```
 
 ---
@@ -237,64 +229,51 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    INPUT[Raw Clarity Contract Text]
+    IN["Raw Clarity Contract Source"]
 
-    subgraph Stage1["Stage 1 — Parsing"]
-        TOKENIZE[Tokenizer\nClarity lexer]
-        AST_BUILD[AST Builder\nS-expression tree]
-        SYMTABLE[Symbol Table\nfunction and variable registry]
-        CFGRAPH[Control Flow Graph]
+    subgraph S1["Stage 1 — Parsing"]
+        T["Lexer + Tokenizer\nClarity grammar"]
+        A["AST Builder\nS-expression tree"]
+        SYM["Symbol Table\nfunctions, variables, constants, maps"]
+        CFG["Control Flow Graph\nexecution path analysis"]
+        T --> A --> SYM & CFG
     end
 
-    subgraph Stage2["Stage 2 — Static Analysis (Fast Path)"]
-        RULE_ENGINE[Rule Engine\ndeterministic checks]
-        CL001[CL-001 Arithmetic]
-        CL002[CL-002 Auth]
-        CL006[CL-006 Hardcoded]
-        CL008[CL-008 Unguarded]
-        FAST_FINDINGS[Static Findings]
+    subgraph S2["Stage 2a — Static Analysis (Fast, Deterministic)"]
+        RE["Rule Engine"]
+        C1["CL-001\nUnchecked arithmetic"]
+        C2["CL-002\nMissing principal auth"]
+        C4["CL-004\nMissing post-conditions"]
+        C5["CL-005\nReentrancy-equivalent"]
+        C6["CL-006\nHardcoded principals"]
+        C8["CL-008\nUnguarded public functions"]
+        SF["Static Findings\n{rule_id, line, confidence: 1.0}"]
+        RE --> C1 & C2 & C4 & C5 & C6 & C8 --> SF
     end
 
-    subgraph Stage3["Stage 3 — LLM Semantic Analysis (Deep Path)"]
-        EMBED[Contract Embedder\nchunk + vectorize]
-        SIMILAR[Similarity Search\nknown vulnerable patterns]
-        LLM_CLS[Vulnerability Classifier\nmulti-label]
-        LLM_EXP[Explanation Generator]
-        LLM_FIX[Fix Synthesizer\nidiomatic Clarity]
-        DEEP_FINDINGS[Semantic Findings]
+    subgraph S3["Stage 2b — LLM Semantic Analysis (Deep, Contextual)"]
+        EM["Contract Embedder\nchunk + vectorize"]
+        VS["Vector Similarity Search\nknown vulnerable patterns in Qdrant"]
+        CL["Multi-label Classifier\nvulnerability categories + severity"]
+        EX["Explanation Generator\nplain-language finding descriptions"]
+        FX["Fix Synthesizer\nidiomatic Clarity rewrites"]
+        DF["Semantic Findings\n{finding, explanation, suggestion, confidence}"]
+        EM --> VS --> CL --> EX --> FX --> DF
     end
 
-    subgraph Stage4["Stage 4 — Aggregation"]
-        DEDUP[Deduplication\nmerge overlapping findings]
-        RANK[Confidence Ranker]
-        FILTER[Severity Filter\nper user threshold]
-        REPORT[Final Audit Report]
+    subgraph S4["Stage 3 — Aggregation"]
+        DD["Deduplication\nmerge overlapping findings by line range"]
+        RK["Confidence Ranker\nsort by severity × confidence"]
+        FL["Severity Filter\nper user threshold"]
+        RPT["Audit Report\n{findings[], summary, audit_id}"]
+        DD --> RK --> FL --> RPT
     end
 
-    INPUT --> TOKENIZE
-    TOKENIZE --> AST_BUILD
-    AST_BUILD --> SYMTABLE
-    AST_BUILD --> CFGRAPH
-
-    CFGRAPH --> RULE_ENGINE
-    RULE_ENGINE --> CL001
-    RULE_ENGINE --> CL002
-    RULE_ENGINE --> CL006
-    RULE_ENGINE --> CL008
-    CL001 & CL002 & CL006 & CL008 --> FAST_FINDINGS
-
-    CFGRAPH --> EMBED
-    EMBED --> SIMILAR
-    SIMILAR --> LLM_CLS
-    LLM_CLS --> LLM_EXP
-    LLM_EXP --> LLM_FIX
-    LLM_FIX --> DEEP_FINDINGS
-
-    FAST_FINDINGS --> DEDUP
-    DEEP_FINDINGS --> DEDUP
-    DEDUP --> RANK
-    RANK --> FILTER
-    FILTER --> REPORT
+    IN --> T
+    CFG --> RE
+    CFG --> EM
+    SF --> DD
+    DF --> DD
 ```
 
 ---
@@ -303,60 +282,45 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    subgraph Collect["Data Collection"]
-        MAINNET[Stacks Mainnet\nDeployed Contracts]
-        SYNTHETIC[Synthetic Generator\nAdversarial Examples]
-        OSS[Open Source\nClarity Repos]
+    subgraph DC["Data Collection"]
+        MN["Stacks Mainnet\ndeployed contracts via API"]
+        SY["Synthetic Generator\nadversarial + edge cases"]
+        OS["Open Source Repos\nGitHub Clarity projects"]
     end
 
-    subgraph Preprocess["Preprocessing"]
-        NORMALIZE[Normalize + Clean]
-        AST_EXTRACT[AST Extraction]
-        LABEL[Vulnerability Labeling\nmanual + heuristic]
-        SPLIT[Train / Val / Test Split\n80 / 10 / 10]
+    subgraph PP["Preprocessing"]
+        NM["Normalize + Deduplicate"]
+        AX["AST Extraction\nper contract"]
+        LB["Vulnerability Labeling\nheuristic + manual review"]
+        SP["80 / 10 / 10 Split\ntrain / val / test"]
     end
 
-    subgraph Train["Training"]
-        BASE[Base LLM\ncode-specialized]
-        FINETUNE[Fine-tuning\nClarity corpus]
-        RLHF[RLHF\nfix quality feedback]
+    subgraph TR["Training"]
+        BM["Base LLM\ncode-specialized model"]
+        FT["Fine-tuning\nClarity-specific corpus\ncontrastive learning on vuln pairs"]
+        RH["RLHF\nfix quality feedback from auditors"]
     end
 
-    subgraph Eval["Evaluation"]
-        PREC[Precision per class]
-        RECALL[Recall per class]
-        F1[F1 Score]
-        FPR[False Positive Rate\ntarget less than 10%]
+    subgraph EV["Evaluation"]
+        PR["Precision per class\ntarget >90% on HIGH severity"]
+        RC["Recall per class"]
+        F1["F1 Score\nweighted average"]
+        FP["False Positive Rate\ntarget <10%"]
     end
 
-    subgraph Deploy["Deployment"]
-        QUANTIZE[Quantization INT8]
-        SERVE[Inference Server vLLM]
-        MONITOR[Drift Monitor]
+    subgraph DP["Deployment"]
+        QT["INT8 Quantization\nlatency optimization"]
+        SV["vLLM Inference Server\nbatching + streaming"]
+        MO["Drift Monitor\nproduction feedback loop"]
     end
 
-    MAINNET --> NORMALIZE
-    SYNTHETIC --> NORMALIZE
-    OSS --> NORMALIZE
-    NORMALIZE --> AST_EXTRACT
-    AST_EXTRACT --> LABEL
-    LABEL --> SPLIT
-
-    SPLIT --> BASE
-    BASE --> FINETUNE
-    FINETUNE --> RLHF
-
-    RLHF --> PREC
-    RLHF --> RECALL
-    PREC & RECALL --> F1
-    F1 --> FPR
-
-    FPR -->|Pass threshold| QUANTIZE
-    FPR -->|Fail| FINETUNE
-
-    QUANTIZE --> SERVE
-    SERVE --> MONITOR
-    MONITOR -->|Degradation detected| FINETUNE
+    MN & SY & OS --> NM --> AX --> LB --> SP
+    SP --> BM --> FT --> RH
+    RH --> PR & RC --> F1 --> FP
+    FP -->|"Pass: < 10% FPR"| QT
+    FP -->|"Fail: retrain"| FT
+    QT --> SV --> MO
+    MO -->|"Degradation alert"| FT
 ```
 
 ---
@@ -365,43 +329,34 @@ flowchart LR
 
 ```mermaid
 flowchart TD
-    PUSH[Git Push or PR Opened]
+    PUSH["Git Push / Pull Request Opened"]
 
-    subgraph GHA["GitHub Actions Workflow"]
-        TRIGGER[on: push, pull_request]
-        CHECKOUT[Checkout Repo]
-        SETUP[Setup claritylens CLI]
-        SCAN[claritylens audit ./contracts/ --format=json]
-        PARSE[Parse audit-report.json]
+    subgraph WF["GitHub Actions Workflow (.github/workflows/claritylens.yml)"]
+        TR["Trigger: on push + pull_request"]
+        CO["Checkout repository"]
+        IN["Install claritylens CLI\npip install claritylens"]
+        SC["Scan all contracts\nclaritylens audit ./contracts/ --format=json --out=report.json"]
+        PA["Parse report.json\njq .summary.high + .summary.medium"]
     end
 
-    subgraph Decision["Decision Logic"]
-        CHECK_HIGH{Any HIGH\nseverity findings?}
-        CHECK_MED{Any MEDIUM\nseverity findings?}
+    subgraph DEC["Decision Engine"]
+        CH{".summary.high > 0 ?"}
+        CM{".summary.medium > 0 ?"}
     end
 
-    subgraph Actions["Actions"]
-        BLOCK[Block Merge\nFail check]
-        PR_COMMENT_H[Post PR Comment\nHIGH findings summary]
-        PR_COMMENT_M[Post PR Comment\nMEDIUM findings warning]
-        LOG[Log LOW findings\nto job summary]
-        PASS[Pass Check\nGreen status]
+    subgraph ACT["Actions"]
+        BL["Fail GitHub Check\nBlock merge"]
+        PCH["Post PR Comment\nHIGH findings summary with line numbers"]
+        PCM["Post PR Comment\nMEDIUM findings warning"]
+        LOG["Append to Job Summary\nLOW + INFO findings"]
+        PASS["Pass GitHub Check\nMark PR clean"]
     end
 
-    PUSH --> TRIGGER
-    TRIGGER --> CHECKOUT
-    CHECKOUT --> SETUP
-    SETUP --> SCAN
-    SCAN --> PARSE
-    PARSE --> CHECK_HIGH
-
-    CHECK_HIGH -->|Yes| BLOCK
-    BLOCK --> PR_COMMENT_H
-
-    CHECK_HIGH -->|No| CHECK_MED
-    CHECK_MED -->|Yes| PR_COMMENT_M
-    CHECK_MED -->|No| LOG
-    LOG --> PASS
+    PUSH --> TR --> CO --> IN --> SC --> PA --> CH
+    CH -->|"Yes"| BL --> PCH
+    CH -->|"No"| CM
+    CM -->|"Yes"| PCM
+    CM -->|"No"| LOG --> PASS
 ```
 
 ---
@@ -410,29 +365,31 @@ flowchart TD
 
 ### Endpoints
 
-```
-POST   /v1/audit            Run a full vulnerability audit
-POST   /v1/explain          Natural language contract explanation
-POST   /v1/suggest          Get idiomatic fix for flagged code
-GET    /v1/report/:id       Retrieve a stored audit report
-GET    /v1/rules            List all active vulnerability rules
-POST   /v1/batch            Submit multiple contracts for async audit
-GET    /v1/batch/:job_id    Poll batch job status
-DELETE /v1/report/:id       Delete an audit record
-```
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/v1/audit` | Full vulnerability audit — returns findings, severity, suggestions |
+| `POST` | `/v1/explain` | Natural language explanation of a contract or function |
+| `POST` | `/v1/suggest` | Idiomatic Clarity rewrite for a flagged code block |
+| `GET` | `/v1/report/:id` | Retrieve a previously stored audit report |
+| `GET` | `/v1/rules` | List all active vulnerability rules and their descriptions |
+| `POST` | `/v1/batch` | Submit multiple contracts for async parallel audit |
+| `GET` | `/v1/batch/:job_id` | Poll async batch job status |
+| `DELETE` | `/v1/report/:id` | Delete an audit record |
+
+---
 
 ### POST /v1/audit
 
 **Request**
 ```json
 {
-  "contract": "(define-public (transfer (amount uint) (recipient principal)) ...)",
+  "contract": "(define-public (transfer (amount uint) (recipient principal))\n  (begin\n    (var-set balance (+ (var-get balance) amount))\n    (ok true)))",
   "contract_name": "my-token",
   "options": {
     "severity_threshold": "low",
     "include_suggestions": true,
-    "include_explanation": false,
-    "rules": ["CL-001", "CL-002", "CL-004"]
+    "include_explanation": true,
+    "rules": ["CL-001", "CL-002", "CL-004", "CL-008"]
   }
 }
 ```
@@ -440,33 +397,48 @@ DELETE /v1/report/:id       Delete an audit record
 **Response**
 ```json
 {
-  "audit_id": "aud_7f3k2m",
+  "audit_id": "aud_7f3k2m9x",
   "contract_name": "my-token",
   "status": "complete",
-  "duration_ms": 340,
+  "cached": false,
+  "duration_ms": 312,
   "findings": [
     {
       "id": "CL-002",
       "title": "Missing principal authorization",
       "severity": "high",
-      "line_start": 3,
-      "line_end": 7,
+      "line_start": 1,
+      "line_end": 4,
       "column": 1,
-      "description": "The transfer function modifies token balances without verifying that tx-sender is the token owner.",
-      "suggestion": "Add (asserts! (is-eq tx-sender sender) ERR-NOT-AUTHORIZED) before state mutation.",
-      "confidence": 0.94,
+      "description": "The `transfer` function modifies state without verifying the caller is authorized. Any tx-sender can invoke this and modify balances.",
+      "suggestion": "(asserts! (is-eq tx-sender contract-owner) ERR-NOT-AUTHORIZED)",
+      "confidence": 0.97,
       "references": ["https://docs.stacks.co/clarity/security/principals"]
+    },
+    {
+      "id": "CL-001",
+      "title": "Unchecked arithmetic",
+      "severity": "high",
+      "line_start": 3,
+      "line_end": 3,
+      "column": 18,
+      "description": "Direct use of `+` on uint values can silently overflow. Clarity does abort on overflow, but explicit checked arithmetic communicates intent and is a required pattern in audited contracts.",
+      "suggestion": "(unwrap! (checked-add (var-get balance) amount) ERR-OVERFLOW)",
+      "confidence": 0.89,
+      "references": ["https://docs.stacks.co/clarity/language-functions#checked-add"]
     }
   ],
   "summary": {
-    "total": 1,
-    "high": 1,
+    "total": 2,
+    "high": 2,
     "medium": 0,
     "low": 0,
     "info": 0
   }
 }
 ```
+
+---
 
 ### POST /v1/explain
 
@@ -483,15 +455,19 @@ DELETE /v1/report/:id       Delete an audit record
 ```json
 {
   "target": "transfer",
-  "explanation": "This function allows any principal to transfer tokens from their own balance to a recipient, provided the amount is positive and the sender has sufficient funds.",
+  "type": "public-function",
+  "explanation": "This function allows any principal to add an arbitrary amount to the contract's balance variable and unconditionally return success. It does not verify caller identity, validate input bounds, or emit events — making it unsafe for production use.",
   "inputs": [
-    { "name": "amount", "type": "uint", "description": "Number of tokens to transfer" },
-    { "name": "recipient", "type": "principal", "description": "Receiving address" }
+    { "name": "amount", "type": "uint", "description": "Quantity to add to balance" },
+    { "name": "recipient", "type": "principal", "description": "Declared but unused in current implementation" }
   ],
-  "outputs": { "type": "response bool uint", "description": "ok true on success, err code on failure" },
-  "side_effects": ["Modifies token-balances data map", "Emits transfer event"]
+  "outputs": { "type": "(response bool uint)", "on_success": "true", "on_failure": "error uint" },
+  "side_effects": ["Modifies `balance` data variable"],
+  "risks": ["No access control", "Unused parameter suggests incomplete implementation"]
 }
 ```
+
+---
 
 ### POST /v1/suggest
 
@@ -500,7 +476,7 @@ DELETE /v1/report/:id       Delete an audit record
 {
   "contract": "...",
   "finding_id": "CL-001",
-  "target_lines": [12, 15]
+  "target_lines": [3, 3]
 }
 ```
 
@@ -508,10 +484,10 @@ DELETE /v1/report/:id       Delete an audit record
 ```json
 {
   "finding_id": "CL-001",
-  "original": "(+ balance amount)",
-  "suggested": "(unwrap! (checked-add balance amount) ERR-OVERFLOW)",
-  "diff": "- (+ balance amount)\n+ (unwrap! (checked-add balance amount) ERR-OVERFLOW)",
-  "explanation": "Use checked arithmetic to prevent silent integer overflow."
+  "original": "(var-set balance (+ (var-get balance) amount))",
+  "suggested": "(var-set balance (unwrap! (checked-add (var-get balance) amount) ERR-OVERFLOW))",
+  "diff": "- (var-set balance (+ (var-get balance) amount))\n+ (var-set balance (unwrap! (checked-add (var-get balance) amount) ERR-OVERFLOW))",
+  "explanation": "Replace bare `+` with `checked-add`, which returns `(some result)` on success and `none` on overflow. `unwrap!` converts `none` to an explicit error code. Define `ERR-OVERFLOW` as `(define-constant ERR-OVERFLOW (err u100))` at the top of your contract."
 }
 ```
 
@@ -521,34 +497,34 @@ DELETE /v1/report/:id       Delete an audit record
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Received : POST /audit
+    [*] --> Received : POST /v1/audit
 
-    Received --> Authenticating : validate API key
-    Authenticating --> Rejected : invalid key or rate limit
-    Authenticating --> CacheCheck : valid
+    Received --> Authenticating : extract API key header
+    Authenticating --> Rejected : invalid or expired key
+    Authenticating --> RateLimited : quota exceeded
+    Authenticating --> CacheCheck : valid key
 
-    CacheCheck --> Returning : cache hit
-    CacheCheck --> Queued : cache miss
+    CacheCheck --> Serving : cache hit
+    CacheCheck --> Queuing : cache miss
 
-    Returning --> [*] : 200 cached response
+    Serving --> [*] : 200 cached response
 
-    Queued --> Parsing : dequeue job
+    Queuing --> Parsing : dequeue
     Parsing --> ParseError : invalid Clarity syntax
-    Parsing --> Analyzing : AST built
+    Parsing --> StaticPass : AST built
+    Parsing --> SemanticPass : AST built
 
-    Analyzing --> StaticPass : pattern matching
-    Analyzing --> SemanticPass : LLM inference
-    StaticPass --> Aggregating
-    SemanticPass --> Aggregating
+    StaticPass --> Aggregating : static findings ready
+    SemanticPass --> Aggregating : semantic findings ready
 
-    Aggregating --> Scoring : merge and dedup
-    Scoring --> Persisted : save to DB
+    Aggregating --> Scoring : merge and dedup complete
+    Scoring --> Persisting : confidence ranked
+    Persisting --> Caching : saved to PostgreSQL
+    Caching --> [*] : 200 live response
 
-    Persisted --> Cached : write to Redis
-    Cached --> [*] : 200 findings response
-
-    ParseError --> [*] : 422 parse error
-    Rejected --> [*] : 401 or 429
+    ParseError --> [*] : 422 Unprocessable Entity
+    Rejected --> [*] : 401 Unauthorized
+    RateLimited --> [*] : 429 Too Many Requests
 ```
 
 ---
@@ -560,45 +536,49 @@ erDiagram
     AUDIT_REQUEST {
         uuid audit_id PK
         text contract_name
-        text contract_hash
+        varchar contract_hash "SHA-256 of source"
         text contract_source
         timestamp created_at
         uuid api_key_id FK
         jsonb options
-        enum status
+        enum status "queued | running | complete | error"
         int duration_ms
+        bool cached
     }
 
     FINDING {
         uuid finding_id PK
         uuid audit_id FK
-        varchar rule_id
-        enum severity
+        varchar rule_id FK
+        enum severity "high | medium | low | info"
         int line_start
         int line_end
         int column
         text title
         text description
         text suggestion
-        float confidence
+        text diff
+        float confidence "0.0 - 1.0"
         jsonb metadata
     }
 
     RULE {
-        varchar rule_id PK
+        varchar rule_id PK "e.g. CL-001"
         text title
         enum severity
         text description
-        text pattern
+        text detection_method "static | semantic | hybrid"
         boolean active
         timestamp updated_at
+        int false_positive_rate "basis points, from eval"
     }
 
     API_KEY {
         uuid key_id PK
-        varchar key_hash
+        varchar key_hash "bcrypt hashed"
         varchar label
-        int rate_limit_per_hour
+        int rate_limit_rph "requests per hour"
+        int audits_remaining
         timestamp created_at
         timestamp expires_at
         boolean active
@@ -607,56 +587,77 @@ erDiagram
     CONTRACT_EMBEDDING {
         uuid embedding_id PK
         uuid audit_id FK
-        text contract_hash
-        vector embedding
+        varchar contract_hash
+        vector embedding "1536-dim float[]"
         timestamp created_at
     }
 
-    AUDIT_REQUEST ||--o{ FINDING : "has"
+    AUDIT_REQUEST ||--o{ FINDING : "contains"
     FINDING }o--|| RULE : "triggered by"
-    AUDIT_REQUEST }o--|| API_KEY : "authenticated by"
-    AUDIT_REQUEST ||--o| CONTRACT_EMBEDDING : "embedded as"
+    AUDIT_REQUEST }o--|| API_KEY : "authorized by"
+    AUDIT_REQUEST ||--o| CONTRACT_EMBEDDING : "vectorized as"
 ```
 
 ---
 
 ## Vulnerability Detection
 
-| ID | Vulnerability | Severity | Description |
+### Current Rule Set (v0.1)
+
+| ID | Class | Severity | Detection Method | Description |
+|---|---|---|---|---|
+| CL-001 | Unchecked arithmetic | **HIGH** | Static + Semantic | Direct use of `+`, `-`, `*` on uint without `checked-*` wrappers |
+| CL-002 | Missing principal authorization | **HIGH** | Semantic | State-mutating public functions that don't assert `tx-sender` or `contract-caller` |
+| CL-003 | Unsafe `unwrap!` usage | **MEDIUM** | Static | `unwrap!` with panic-inducing error codes on paths that can be triggered externally |
+| CL-004 | Missing post-conditions | **MEDIUM** | Semantic | STX/token transfers without corresponding post-conditions in the calling transaction |
+| CL-005 | Reentrancy-equivalent | **HIGH** | Semantic | Inter-contract calls before state updates — exploitable despite Clarity's partial reentrancy guard |
+| CL-006 | Hardcoded principals | **LOW** | Static | Contract addresses as literals rather than `define-constant` — upgrade risk |
+| CL-007 | Inconsistent error codes | **MEDIUM** | Static | Error uint values reused across different failure conditions, obscuring debugging |
+| CL-008 | Unguarded public functions | **HIGH** | Semantic | Public functions mutating data-maps without any access control pattern |
+
+### Detection Accuracy Targets (v0.1)
+
+| Severity | Precision Target | Recall Target | Max FPR |
 |---|---|---|---|
-| CL-001 | Unchecked arithmetic | HIGH | Integer overflow/underflow not guarded with `checked-add` or explicit bounds |
-| CL-002 | Missing principal authorization | HIGH | Functions that modify state without validating `tx-sender` or `contract-caller` |
-| CL-003 | Unsafe `unwrap!` usage | MEDIUM | Using `unwrap!` where failure modes are undocumented or unexpected |
-| CL-004 | Missing post-conditions | MEDIUM | STX or token transfers without post-conditions on the calling transaction |
-| CL-005 | Reentrancy-equivalent patterns | HIGH | Inter-contract calls that modify state before returning |
-| CL-006 | Hardcoded principals | LOW | Contract addresses as literals rather than defined constants |
-| CL-007 | Improper error handling | MEDIUM | Error codes not consistently defined across contract functions |
-| CL-008 | Unguarded public functions | HIGH | Public functions that mutate data maps without access control |
+| HIGH | ≥ 92% | ≥ 80% | ≤ 8% |
+| MEDIUM | ≥ 85% | ≥ 75% | ≤ 15% |
+| LOW | ≥ 80% | ≥ 70% | ≤ 20% |
+
+*Targets are based on an internal held-out test set of 5,000 labeled Clarity contracts. Full eval results will be published at beta launch.*
 
 ---
 
 ## VS Code Extension
 
-**Features:**
-- Inline squiggles and diagnostics mapped to the Problems panel
-- Hover tooltips with finding description and suggested fix
-- Command palette: `ClarityLens: Audit Current File`, `ClarityLens: Explain Function`
-- Status bar showing audit state (clean / warnings / errors)
+The ClarityLens VS Code extension provides real-time security feedback with zero workflow friction.
 
-**Installation** *(coming soon — pending public beta)*
+### Features
+- Inline squiggles on vulnerable lines, mapped to the Problems panel
+- Rich hover tooltips: finding description, severity badge, suggested fix with diff view
+- `ClarityLens: Audit File` — on-demand full audit of the active file
+- `ClarityLens: Explain Function` — select any function, get a plain-language explanation
+- `ClarityLens: Apply Suggestion` — one-click apply of a suggested fix (with undo)
+- Status bar item: shows audit state (Clean / Warnings / Errors)
+
+### Installation *(pending public beta)*
 ```bash
+# VS Code Marketplace (coming soon)
 ext install claritylens
-# or
+
+# Manual VSIX install
 code --install-extension claritylens-0.1.0.vsix
 ```
 
-**Configuration (`settings.json`)**
+### Configuration (`settings.json`)
 ```json
 {
-  "claritylens.apiKey": "your-api-key",
+  "claritylens.apiKey": "cl_your_api_key_here",
   "claritylens.auditOnSave": true,
+  "claritylens.auditDebounceMs": 300,
   "claritylens.severityThreshold": "medium",
-  "claritylens.endpoint": "https://api.claritylens.dev"
+  "claritylens.endpoint": "https://api.claritylens.dev",
+  "claritylens.showConfidenceScores": true,
+  "claritylens.autoApplySuggestions": false
 }
 ```
 
@@ -664,60 +665,104 @@ code --install-extension claritylens-0.1.0.vsix
 
 ## Roadmap
 
-**Phase 1 — Foundation** *(In progress)*
-- [x] Project scaffolding and public repo
-- [ ] Clarity contract dataset curation and labeling (~50k contracts)
-- [ ] Vulnerability classifier v1 (8 rule classes)
-- [ ] Internal evaluation suite
+### Phase 1 — Foundation *(Month 1)*
+- [x] Public repo and project documentation
+- [ ] Clarity contract dataset: scrape and label ~50k mainnet contracts
+- [ ] Vulnerability taxonomy: finalize CL-001 through CL-008 with labeled examples
+- [ ] Baseline classifier: fine-tune on Clarity corpus, establish eval benchmarks
+- [ ] Internal test suite: 5,000 labeled contracts for precision/recall measurement
 
-**Phase 2 — Build**
-- [ ] FastAPI inference gateway
-- [ ] VS Code extension client (LSP-compatible)
-- [ ] CLI tool
-- [ ] GitHub Action for CI/CD integration
+**Deliverable:** Trained model checkpoint with >90% precision on HIGH severity findings, published eval results.
 
-**Phase 3 — Ship**
-- [ ] Public beta launch
-- [ ] VS Code Marketplace listing
-- [ ] Documentation site
-- [ ] Technical blog posts for the Stacks community
+### Phase 2 — Build *(Month 2)*
+- [ ] FastAPI gateway: `/audit`, `/explain`, `/suggest`, `/report` endpoints
+- [ ] VS Code extension: LSP client, diagnostic rendering, hover tooltips
+- [ ] CLI tool: `claritylens audit`, `claritylens explain`, `--format=json` output
+- [ ] GitHub Action: ready-to-use workflow for CI/CD integration
+- [ ] API authentication: key management, rate limiting, usage tracking
 
-**Phase 4 — Grow** *(post-grant)*
-- [ ] Web playground
-- [ ] Multi-contract project audits
-- [ ] Clarinet integration
-- [ ] Custom rule definitions for teams
+**Deliverable:** Working end-to-end system. API accessible, VS Code extension installable, GitHub Action published.
+
+### Phase 3 — Ship *(Month 3)*
+- [ ] Public beta launch — open API access, VS Code Marketplace listing
+- [ ] Documentation site — quickstart, API reference, integration guides
+- [ ] Clarinet plugin — native integration with the standard Stacks CLI
+- [ ] Stacks community outreach — forum posts, office hours, feedback collection
+- [ ] Two technical blog posts: methodology + a deep-dive on a real vulnerability caught in a mainnet contract
+
+**Deliverable:** Public beta with ≥50 active developers in the first month, community feedback loop established.
+
+### Phase 4 — Grow *(Post-grant, self-sustaining)*
+- [ ] Web playground — audit any contract from a browser, no install required
+- [ ] Multi-contract project audits — analyze contract dependencies together
+- [ ] Custom rule definitions — teams can write and share their own detection rules
+- [ ] Audit history dashboard — track security posture across a project over time
+- [ ] SaaS tier for teams — sustains ongoing infrastructure costs
 
 ---
 
-## Research and Methodology
+## Research & Methodology
 
-ClarityLens is built on a foundation of applied ML security research:
+ClarityLens is built on a foundation of peer-reviewed ML security research. The vulnerability detection architecture directly applies three published approaches:
 
-- Adversarially resilient model design — [IEEE HiPC 2024](https://ieeexplore.ieee.org/)
-- Distributed, fault-tolerant inference pipelines — [IEEE SMC 2025](https://ieeexplore.ieee.org/)
-- Risk-aware prioritization under uncertainty — [IEEE CCGrid 2026](https://ieeexplore.ieee.org/)
+**Adversarially Resilient Model Design** — [IEEE HiPC 2024](https://ieeexplore.ieee.org/)
+The model training methodology for ClarityLens draws from work on cost-sensitive learning to maintain detection accuracy under adversarial conditions — relevant here because sophisticated contract vulnerabilities are often designed to evade pattern-based detection.
 
-The model is fine-tuned on a labeled corpus of Clarity contracts from Stacks mainnet deployments, augmented with synthetically generated vulnerable examples. Evaluation targets **>90% precision** on high-severity findings — a deliberate design choice to minimize false-positive noise. A tool developers don't trust, they don't use.
+**Distributed, Fault-Tolerant Inference Pipelines** — [IEEE SMC 2025](https://ieeexplore.ieee.org/)
+The two-stage inference architecture (fast static pre-pass + deep LLM semantic pass) is informed by research on hierarchical, asynchronous systems — ensuring ClarityLens stays responsive under load without degrading analysis quality.
+
+**Risk-Aware Prioritization Under Uncertainty** — [IEEE CCGrid 2026](https://ieeexplore.ieee.org/)
+ClarityLens's confidence scoring and severity ranking system applies quantum-safe risk prioritization techniques to smart contract findings — ensuring HIGH severity findings surface reliably even when the model is uncertain.
+
+**Why these papers matter to the grant:** This is not a "vibe-coded" wrapper around a general LLM. The vulnerability detection logic is grounded in published, peer-reviewed methodology. The model will be evaluated rigorously, and the eval results will be published openly.
+
+---
+
+## Competitive Landscape
+
+| Tool | Type | Fix Suggestions | IDE Integration | Stacks-specific | AI/Semantic |
+|---|---|---|---|---|---|
+| **STACY** (CoinFabrik) | Static analyzer | No | No | Yes | No |
+| **Clarinet** (Hiro) | Dev CLI + linter | No | Partial | Yes | No |
+| **Slither** (Ethereum) | Static analyzer | No | Partial | No | No |
+| **Aderyn** (Cyfrin) | Static analyzer | No | No | No | No |
+| **ClarityLens** | AI-hybrid auditor | Yes | Yes | Yes | Yes |
+
+ClarityLens is not competing with STACY or Clarinet — it is **complementary**. STACY and Clarinet catch known deterministic patterns fast. ClarityLens catches what they miss: business logic flaws, novel vulnerability patterns, and authorization errors that require understanding the contract's *intent*. The plan is to integrate ClarityLens output as an optional step in Clarinet's workflow, not replace it.
+
+---
+
+## Long-Term Sustainability
+
+ClarityLens is designed to remain active in the Stacks ecosystem indefinitely, not as a grant-funded project that disappears after delivery.
+
+**Open source core:** All detection rules, the VS Code extension, and the CLI will be MIT-licensed. The community can contribute new vulnerability classes.
+
+**Community-driven rule growth:** A public GitHub repo for rule submissions means the detection surface grows with the ecosystem. As new Clarity patterns emerge (sBTC integrations, new SIPs), the community can add detection rules without depending on a single maintainer.
+
+**Self-sustaining revenue:** A free tier covers individual developers and open-source projects. A paid tier for teams and protocols requiring higher API volume, audit history, and custom rules covers infrastructure costs post-grant.
+
+**Personal commitment:** I graduate from IIT Bhilai in May 2026 and intend to remain active in the Stacks ecosystem beyond this grant. ClarityLens is not a side project — it's the beginning of a sustained contribution to Stacks developer infrastructure.
 
 ---
 
 ## Early Access
 
-The core inference model and API are in private testing. If you're a developer building on Stacks, a researcher interested in Clarity security, or a protocol team wanting CI/CD integration — reach out.
+The core inference API is in private testing. If you're a developer building on Stacks, a security researcher, or a protocol team who wants to integrate auditing into your CI pipeline before public launch, reach out.
 
 **Email:** nidhis@iitbhilai.ac.in  
-**Issues:** Open one with the `early-access` label
+**Issues:** Open one with the `early-access` label  
+**Stacks Forum:** Will be posted in the builders section once beta is ready
 
 ---
 
 ## Contributing
 
-Contributions to public components (VS Code extension, CLI, docs) are welcome once the initial release ships.
+Contributions to public components (VS Code extension, CLI, documentation, detection rules) are welcome once the initial beta ships.
 
-- Star the repo to follow progress
-- Open issues for feature requests or questions
-- Reach out for research collaboration
+- * Star the repo to track progress
+- 🐛 Open issues for feature requests, questions, or vulnerability class suggestions
+- 📬 Reach out for research collaboration or ecosystem partnerships
 
 ---
 
@@ -725,8 +770,14 @@ Contributions to public components (VS Code extension, CLI, docs) are welcome on
 
 MIT License — see [LICENSE](./LICENSE) for details.
 
-The core ML model and training data remain proprietary during the private beta period.
+The core ML model weights and training dataset are proprietary during the private beta period. All tooling (extension, CLI, API schema) is open source.
 
 ---
 
-<p align="center">Built for the Stacks ecosystem by <a href="https://github.com/Nidhicodes">Nidhi Singh</a></p>
+<div align="center">
+
+Built for the Stacks ecosystem
+
+[github.com/Nidhicodes/claritylens](https://github.com/Nidhicodes/claritylens) · nidhis@iitbhilai.ac.in
+
+</div>
